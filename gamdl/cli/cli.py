@@ -4,6 +4,7 @@ from functools import wraps
 from pathlib import Path
 
 import click
+import httpx
 import colorama
 from dataclass_click import dataclass_click
 
@@ -132,6 +133,8 @@ async def main(config: CliConfig):
         exclude_tags=config.exclude_tags,
         cover_size=config.cover_size,
         truncate=config.truncate,
+        remux_to_mp3=config.remux_to_mp3,
+        mp3_bitrate=config.mp3_bitrate,
     )
     song_downloader = AppleMusicSongDownloader(
         base_downloader=base_downloader,
@@ -268,21 +271,52 @@ async def main(config: CliConfig):
             )
             logger.info(download_queue_progress + f' Downloading "{media_title}"')
 
-            try:
-                await downloader.download(download_item)
-            except GamdlError as e:
-                logger.warning(
-                    download_queue_progress + f' Skipping "{media_title}": {e}'
-                )
-                continue
-            except KeyboardInterrupt:
-                exit(1)
-            except Exception as e:
-                error_count += 1
-                logger.error(
-                    download_queue_progress + f' Error downloading "{media_title}"',
-                    exc_info=not config.no_exceptions,
-                )
+            for attempt in range(config.retries + 1):
+                try:
+                    await downloader.download(download_item)
+                    break
+                except GamdlError as e:
+                    logger.warning(
+                        download_queue_progress + f' Skipping "{media_title}": {e}'
+                    )
+                    break
+                except KeyboardInterrupt:
+                    exit(1)
+                except (httpx.TransportError, httpx.HTTPStatusError) as e:
+                    if (
+                        isinstance(e, httpx.HTTPStatusError)
+                        and e.response.status_code in {401, 403, 404}
+                    ):
+                        error_count += 1
+                        logger.error(
+                            download_queue_progress
+                            + f' Error downloading "{media_title}"',
+                            exc_info=not config.no_exceptions,
+                        )
+                        break
+
+                    if attempt < config.retries:
+                        logger.warning(
+                            download_queue_progress
+                            + f' Error downloading "{media_title}", '
+                            f"retrying ({attempt + 1}/{config.retries})..."
+                        )
+                        continue
+                    else:
+                        error_count += 1
+                        logger.error(
+                            download_queue_progress
+                            + f' Error downloading "{media_title}"',
+                            exc_info=not config.no_exceptions,
+                        )
+                        break
+                except Exception as e:
+                    error_count += 1
+                    logger.error(
+                        download_queue_progress + f' Error downloading "{media_title}"',
+                        exc_info=not config.no_exceptions,
+                    )
+                    break
 
             if config.sleep > 0 and download_index < len(download_queue):
                 await asyncio.sleep(config.sleep)

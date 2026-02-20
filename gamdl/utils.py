@@ -9,9 +9,7 @@ import httpx
 
 def raise_for_status(httpx_response: httpx.Response, valid_responses: set[int] = {200}):
     if httpx_response.status_code not in valid_responses:
-        raise httpx._exceptions.HTTPError(
-            f"HTTP error {httpx_response.status_code}: {httpx_response.text}"
-        )
+        httpx_response.raise_for_status()
 
 
 def safe_json(httpx_response: httpx.Response) -> dict:

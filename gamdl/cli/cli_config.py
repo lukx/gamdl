@@ -484,3 +484,28 @@ class CliConfig:
             default=0,
         ),
     ]
+    retries: Annotated[
+        int,
+        option(
+            "--retries",
+            help="Number of retries for failed downloads",
+            default=3,
+        ),
+    ]
+    remux_to_mp3: Annotated[
+        bool,
+        option(
+            "--remux-to-mp3",
+            help="Remux to mp3 instead of m4a",
+            is_flag=True,
+        ),
+    ]
+    mp3_bitrate: Annotated[
+        str,
+        option(
+            "--mp3-bitrate",
+            help="Bitrate for mp3 remuxing",
+            type=click.Choice(["low", "mid", "high", "best"]),
+            default="mid",
+        ),
+    ]

@@ -33,6 +33,19 @@ from .types import DownloadItem, UrlInfo
 
 
 class AppleMusicDownloader:
+    AUDIO_EXTENSIONS = [
+        ".m4a",
+        ".m4b",
+        ".mp3",
+        ".flac",
+        ".wav",
+        ".opus",
+        ".ogg",
+        ".aac",
+        ".alac",
+        ".aiff",
+    ]
+
     def __init__(
         self,
         interface: AppleMusicInterface,
@@ -411,11 +424,16 @@ class AppleMusicDownloader:
         if self.song_downloader.synced_lyrics_only:
             return
 
-        if (
-            Path(download_item.final_path).exists()
-            and not self.base_downloader.overwrite
-        ):
-            raise MediaFileExists(download_item.final_path)
+        if not self.base_downloader.overwrite:
+            if Path(download_item.final_path).exists():
+                raise MediaFileExists(download_item.final_path)
+
+            if download_item.media_metadata["type"] in SONG_MEDIA_TYPE:
+                for ext in self.AUDIO_EXTENSIONS:
+                    if Path(download_item.final_path).with_suffix(ext).exists():
+                        raise MediaFileExists(
+                            str(Path(download_item.final_path).with_suffix(ext))
+                        )
 
         if download_item.media_metadata["type"] in {
             *SONG_MEDIA_TYPE,

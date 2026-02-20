@@ -70,7 +70,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
 
         download_item.final_path = self.get_final_path(
             download_item.media_tags,
-            ".m4a",
+            ".mp3" if self.remux_to_mp3 else ".m4a",
             download_item.playlist_tags,
         )
         download_item.synced_lyrics_path = self.get_lyrics_synced_path(
@@ -165,6 +165,34 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             "artist=placeholder",
             "-keep-utc",
             "-new",
+            output_path,
+            silent=self.silent,
+        )
+
+    async def remux_mp3(
+        self,
+        input_path: str,
+        output_path: str,
+    ):
+        bitrate_map = {
+            "low": "128k",
+            "mid": "160k",
+            "high": "192k",
+            "best": "320k",
+        }
+        bitrate = bitrate_map.get(self.mp3_bitrate, "160k")
+
+        await async_subprocess(
+            self.full_ffmpeg_path,
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            input_path,
+            "-codec:a",
+            "libmp3lame",
+            "-b:a",
+            bitrate,
             output_path,
             silent=self.silent,
         )
@@ -278,6 +306,11 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                     decrypted_path,
                     staged_path,
                 )
+        elif self.remux_to_mp3:
+            await self.remux_mp3(
+                decrypted_path if Path(decrypted_path).exists() else encrypted_path,
+                staged_path,
+            )
         else:
             await self.decrypt_amdecrypt(
                 encrypted_path,

@@ -160,6 +160,8 @@ The file is created automatically on first run. Command-line arguments override 
 | `--config-path`                 | Config file path                | `<home>/.gamdl/config.ini`                     |
 | `--log-level`                   | Logging level                   | `INFO`                                         |
 | `--log-file`                    | Log file path                   | -                                              |
+| `--sleep`                       | Seconds to sleep between downloads | `0`                                           |
+| `--retries`                     | Number of retries for failed downloads | `3`                                           |
 | `--no-exceptions`               | Don't print exceptions          | `false`                                        |
 | `--no-config-file`, `-n`        | Don't use a config file         | `false`                                        |
 | **Apple Music Options**         |                                 |                                                |
@@ -198,6 +200,8 @@ The file is created automatically on first run. Command-line arguments override 
 | `--truncate`                    | Max filename length             | -                                              |
 | **Song Options**                |                                 |                                                |
 | `--song-codec`                  | Song codec                      | `aac-legacy`                                   |
+| `--remux-to-mp3`                | Remux to mp3 instead of m4a     | `false`                                        |
+| `--mp3-bitrate`                 | Bitrate for mp3 remuxing        | `mid`                                          |
 | `--synced-lyrics-format`        | Synced lyrics format            | `lrc`                                          |
 | `--no-synced-lyrics`            | Don't download synced lyrics    | `false`                                        |
 | `--synced-lyrics-only`          | Download only synced lyrics     | `false`                                        |
@@ -272,6 +276,13 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `ac3` - AC3 640kbps
 - `alac` - ALAC up to 24-bit/192kHz (unsupported)
 - `ask` - Interactive experimental codec selection
+
+### MP3 Bitrates
+
+- `low` - 128kbps
+- `mid` - 160kbps
+- `high` - 192kbps
+- `best` - 320kbps
 
 ### Synced Lyrics Format
 
