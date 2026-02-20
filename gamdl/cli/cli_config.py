@@ -476,3 +476,11 @@ class CliConfig:
             is_flag=True,
         ),
     ]
+    sleep: Annotated[
+        float,
+        option(
+            "--sleep",
+            help="Seconds to sleep between downloading each song",
+            default=0,
+        ),
+    ]

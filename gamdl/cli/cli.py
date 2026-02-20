@@ -284,4 +284,7 @@ async def main(config: CliConfig):
                     exc_info=not config.no_exceptions,
                 )
 
+            if config.sleep > 0 and download_index < len(download_queue):
+                await asyncio.sleep(config.sleep)
+
     logger.info(f"Finished with {error_count} error(s)")
