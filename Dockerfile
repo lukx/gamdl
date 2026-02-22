@@ -1,7 +1,8 @@
 FROM python:3.11-slim AS builder
 
 WORKDIR /build
-RUN pip install --no-cache-dir --user gamdl
+COPY . .
+RUN pip install --no-cache-dir --user .
 
 # Build Bento4 from source
 FROM python:3.11-slim AS bento4-builder
@@ -56,11 +57,11 @@ COPY --from=gpac-builder /usr/local/bin/MP4Box /usr/local/bin/
 # Download N_m3u8DL-RE - architecture aware, fetches latest release
 RUN ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then \
-        N_M3U8_ARCH="linux-x64"; \
+    N_M3U8_ARCH="linux-x64"; \
     elif [ "$ARCH" = "arm64" ]; then \
-        N_M3U8_ARCH="linux-arm64"; \
+    N_M3U8_ARCH="linux-arm64"; \
     else \
-        echo "Unsupported architecture: $ARCH" && exit 1; \
+    echo "Unsupported architecture: $ARCH" && exit 1; \
     fi && \
     DOWNLOAD_URL=$(curl -s https://api.github.com/repos/nilaoda/N_m3u8DL-RE/releases/latest | jq -r ".assets[] | select(.name | contains(\"${N_M3U8_ARCH}\") and (contains(\"musl\") | not)) | .browser_download_url") && \
     curl -L "$DOWNLOAD_URL" -o /tmp/nm3u8.tar.gz && \
