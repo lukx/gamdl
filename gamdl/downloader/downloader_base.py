@@ -1,34 +1,17 @@
-import asyncio
-import re
-import shutil
 import uuid
+import shutil
 from pathlib import Path
-
-from mutagen.id3 import (
-    APIC,
-    COMM,
-    ID3,
-    TALB,
-    TCMP,
-    TCOM,
-    TCON,
-    TDRC,
-    TIT2,
-    TPOS,
-    TPE1,
-    TPE2,
-    TRCK,
-    TXXX,
-)
-from mutagen.mp3 import MP3
-from mutagen.mp4 import MP4, MP4Cover
+from typing import Union, List
 from pywidevine import Cdm, Device
-from yt_dlp import YoutubeDL
 
 from ..interface.enums import CoverFormat
-from ..interface.types import MediaTags, PlaylistTags
-from ..utils import CustomStringFormatter, async_subprocess
-from .constants import ILLEGAL_CHAR_REPLACEMENT, ILLEGAL_CHARS_RE, TEMP_PATH_TEMPLATE
+from ..metadata.tagger_mp3 import MP3Tagger
+from ..metadata.tagger_mp4 import MP4Tagger
+from ..interface.types import MediaTags
+from ..naming.provider import NamingProvider
+from ..processors.stream_downloader import StreamDownloader
+from ..processors.decryptor import Decryptor
+from ..processors.remuxer import Remuxer
 from .enums import DownloadMode, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 
@@ -91,17 +74,19 @@ class AppleMusicBaseDownloader:
         self.no_album_file_template = no_album_file_template
         self.playlist_file_template = playlist_file_template
         self.date_tag_template = date_tag_template
-        self.exclude_tags = exclude_tags
+        self.exclude_tags = exclude_tags or []
         self.cover_size = cover_size
         self.truncate = truncate
         self.silent = silent
         self.remux_to_mp3 = remux_to_mp3
         self.mp3_bitrate = mp3_bitrate
+        
         self.initialize()
 
     def initialize(self):
         self._initialize_binary_paths()
         self._initialize_cdm()
+        self._initialize_services()
 
     def _initialize_binary_paths(self):
         self.full_nm3u8dlre_path = shutil.which(self.nm3u8dlre_path)
@@ -117,188 +102,33 @@ class AppleMusicBaseDownloader:
             self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
         self.cdm.MAX_NUM_OF_SESSIONS = float("inf")
 
-    def get_random_uuid(self) -> str:
-        return uuid.uuid4().hex[:8]
-
-    def is_media_streamable(
-        self,
-        media_metadata: dict,
-    ) -> bool:
-        return bool(media_metadata["attributes"].get("playParams"))
-
-    def get_playlist_tags(
-        self,
-        playlist_metadata: dict,
-        media_metadata: dict,
-    ) -> PlaylistTags:
-        playlist_track = (
-            playlist_metadata["relationships"]["tracks"]["data"].index(media_metadata)
-            + 1
+    def _initialize_services(self):
+        self.naming = NamingProvider(
+            output_path=self.output_path,
+            temp_path=self.temp_path,
+            album_folder_template=self.album_folder_template,
+            compilation_folder_template=self.compilation_folder_template,
+            no_album_folder_template=self.no_album_folder_template,
+            single_disc_file_template=self.single_disc_file_template,
+            multi_disc_file_template=self.multi_disc_file_template,
+            no_album_file_template=self.no_album_file_template,
+            playlist_file_template=self.playlist_file_template,
+            truncate=self.truncate,
         )
-
-        return PlaylistTags(
-            playlist_artist=playlist_metadata["attributes"].get(
-                "curatorName", "Unknown"
-            ),
-            playlist_id=playlist_metadata["attributes"]["playParams"]["id"],
-            playlist_title=playlist_metadata["attributes"]["name"],
-            playlist_track=playlist_track,
+        self.streamer = StreamDownloader(
+            download_mode=self.download_mode,
+            ffmpeg_path=self.full_ffmpeg_path,
+            nm3u8dlre_path=self.full_nm3u8dlre_path,
+            silent=self.silent,
         )
-
-    def get_temp_path(
-        self,
-        media_id: str,
-        folder_tag: str,
-        file_tag: str,
-        file_extension: str,
-    ) -> str:
-        return str(
-            Path(self.temp_path)
-            / TEMP_PATH_TEMPLATE.format(folder_tag)
-            / (f"{media_id}_{file_tag}" + file_extension)
+        self.decryptor = Decryptor(
+            mp4decrypt_path=self.full_mp4decrypt_path,
+            amdecrypt_path=self.full_amdecrypt_path,
+            silent=self.silent,
         )
-
-    def sanitize_string(
-        self,
-        dirty_string: str,
-        file_ext: str = None,
-    ) -> str:
-        sanitized_string = re.sub(
-            ILLEGAL_CHARS_RE,
-            ILLEGAL_CHAR_REPLACEMENT,
-            dirty_string,
-        )
-
-        if file_ext is None:
-            sanitized_string = sanitized_string[: self.truncate]
-            if sanitized_string.endswith("."):
-                sanitized_string = sanitized_string[:-1] + ILLEGAL_CHAR_REPLACEMENT
-        else:
-            if self.truncate is not None:
-                sanitized_string = sanitized_string[: self.truncate - len(file_ext)]
-            sanitized_string += file_ext
-
-        return sanitized_string.strip()
-
-    def get_final_path(
-        self,
-        tags: MediaTags,
-        file_extension: str,
-        playlist_tags: PlaylistTags | None,
-    ) -> str:
-        if tags.album:
-            template_folder_parts = (
-                self.compilation_folder_template.split("/")
-                if tags.compilation
-                else self.album_folder_template.split("/")
-            )
-        else:
-            template_folder_parts = self.no_album_folder_template.split("/")
-
-        if tags.album:
-            template_file_parts = (
-                self.multi_disc_file_template.split("/")
-                if isinstance(tags.disc_total, int) and tags.disc_total > 1
-                else self.single_disc_file_template.split("/")
-            )
-        else:
-            template_file_parts = self.no_album_file_template.split("/")
-
-        template_parts = template_folder_parts + template_file_parts
-        formatted_parts = []
-
-        for i, part in enumerate(template_parts):
-            is_folder = i < len(template_parts) - 1
-            formatted_part = CustomStringFormatter().format(
-                part,
-                album=(tags.album, "Unknown Album"),
-                album_artist=(tags.album_artist, "Unknown Artist"),
-                album_id=(tags.album_id, "Unknown Album ID"),
-                artist=(tags.artist, "Unknown Artist"),
-                artist_id=(tags.artist_id, "Unknown Artist ID"),
-                composer=(tags.composer, "Unknown Composer"),
-                composer_id=(tags.composer_id, "Unknown Composer ID"),
-                date=(tags.date, "Unknown Date"),
-                disc=(tags.disc, ""),
-                disc_total=(tags.disc_total, ""),
-                media_type=(tags.media_type, "Unknown Media Type"),
-                playlist_artist=(
-                    (playlist_tags.playlist_artist if playlist_tags else None),
-                    "Unknown Playlist Artist",
-                ),
-                playlist_id=(
-                    (playlist_tags.playlist_id if playlist_tags else None),
-                    "Unknown Playlist ID",
-                ),
-                playlist_title=(
-                    (playlist_tags.playlist_title if playlist_tags else None),
-                    "Unknown Playlist Title",
-                ),
-                playlist_track=(
-                    (playlist_tags.playlist_track if playlist_tags else None),
-                    "",
-                ),
-                title=(tags.title, "Unknown Title"),
-                title_id=(tags.title_id, "Unknown Title ID"),
-                track=(tags.track, ""),
-                track_total=(tags.track_total, ""),
-            )
-            sanitized_formatted_part = self.sanitize_string(
-                formatted_part,
-                file_extension if not is_folder else None,
-            )
-            formatted_parts.append(sanitized_formatted_part)
-
-        return str(Path(self.output_path, *formatted_parts))
-
-    async def download_stream(self, stream_url: str, download_path: str):
-        if self.download_mode == DownloadMode.YTDLP:
-            await self.download_ytdlp(stream_url, download_path)
-
-        if self.download_mode == DownloadMode.NM3U8DLRE:
-            await self.download_nm3u8dlre(stream_url, download_path)
-
-    async def download_ytdlp(self, stream_url: str, download_path: str) -> None:
-        await asyncio.to_thread(
-            self._download_ytdlp,
-            stream_url,
-            download_path,
-        )
-
-    def _download_ytdlp(self, stream_url: str, download_path: str) -> None:
-        with YoutubeDL(
-            {
-                "quiet": True,
-                "no_warnings": True,
-                "outtmpl": download_path,
-                "allow_unplayable_formats": True,
-                "overwrites": True,
-                "fixup": "never",
-                "noprogress": self.silent,
-                "allowed_extractors": ["generic"],
-            }
-        ) as ydl:
-            ydl.download(stream_url)
-
-    async def download_nm3u8dlre(self, stream_url: str, download_path: str):
-        download_path_obj = Path(download_path)
-
-        download_path_obj.parent.mkdir(parents=True, exist_ok=True)
-        await async_subprocess(
-            self.full_nm3u8dlre_path,
-            stream_url,
-            "--binary-merge",
-            "--no-log",
-            "--log-level",
-            "off",
-            "--ffmpeg-binary-path",
-            self.full_ffmpeg_path,
-            "--save-name",
-            download_path_obj.stem,
-            "--save-dir",
-            download_path_obj.parent,
-            "--tmp-dir",
-            download_path_obj.parent,
+        self.remuxer = Remuxer(
+            ffmpeg_path=self.full_ffmpeg_path,
+            mp4box_path=self.full_mp4box_path,
             silent=self.silent,
         )
 
@@ -309,217 +139,50 @@ class AppleMusicBaseDownloader:
         cover_bytes: bytes | None,
         extra_tags: dict | None = None,
     ):
-        exclude_tags = self.exclude_tags or []
-
-        filtered_tags = MediaTags(
-            **{
-                k: v
-                for k, v in tags.__dict__.items()
-                if v is not None and k not in exclude_tags
-            }
-        )
-        mp4_tags = filtered_tags.as_mp4_tags(self.date_tag_template)
-
-        skip_tagging = "all" in exclude_tags
-
-        media_path = Path(media_path)
+        skip_tagging = "all" in self.exclude_tags
         if media_path.suffix == ".mp3":
-            await asyncio.to_thread(
-                self.apply_id3_tags,
+            MP3Tagger.apply(
                 media_path,
-                mp4_tags,
+                tags.as_mp4_tags(self.date_tag_template),
                 cover_bytes,
                 skip_tagging,
             )
         else:
-            await asyncio.to_thread(
-                self.apply_mp4_tags,
+            MP4Tagger.apply(
                 media_path,
-                mp4_tags,
+                tags.as_mp4_tags(self.date_tag_template),
                 cover_bytes,
                 skip_tagging,
                 extra_tags,
+                self.cover_format,
             )
 
-    def apply_id3_tags(
-        self,
-        media_path: Path,
-        tags: dict,
-        cover_bytes: bytes | None,
-        skip_tagging: bool,
-    ):
-        try:
-            id3 = ID3(media_path)
-        except:
-            id3 = ID3()
+    def get_random_uuid(self) -> str:
+        return uuid.uuid4().hex[:8]
 
-        id3.delete(media_path)
+    def is_media_streamable(self, media_metadata: dict) -> bool:
+        return bool(media_metadata["attributes"].get("playParams"))
 
-        if not skip_tagging:
-            if cover_bytes is not None:
-                id3.add(
-                    APIC(
-                        encoding=1,
-                        mime="image/jpeg",
-                        type=3,
-                        desc="Cover",
-                        data=cover_bytes,
-                    )
-                )
+    def move_to_final_path(self, stage_path: Union[str, Path], final_path: Union[str, Path]) -> None:
+        stage_path = Path(stage_path)
+        final_path = Path(final_path)
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(stage_path), str(final_path))
 
-            tag_map = {
-                "TALB": (TALB, tags.get("\xa9alb")),
-                "TPE2": (TPE2, tags.get("aART")),
-                "TPE1": (TPE1, tags.get("\xa9ART")),
-                "COMM": (COMM, tags.get("\xa9cmt")),
-                "TCOM": (TCOM, tags.get("\xa9wrt")),
-                "TDRC": (TDRC, tags.get("\xa9day")),
-                "TCON": (TCON, tags.get("\xa9gen")),
-                "TIT2": (TIT2, tags.get("\xa9nam")),
-                "TRCK": (TRCK, tags.get("trkn")),
-                "TPOS": (TPOS, tags.get("disk")),
-                "TCMP": (TCMP, tags.get("cpil")),
-            }
+    def cleanup_temp(self, folder_tag: str):
+        shutil.rmtree(Path(self.temp_path) / f"gamdl_temp_{folder_tag}", ignore_errors=True)
 
-            for frame_id, (frame_class, value) in tag_map.items():
-                if value is not None:
-                    if frame_id == "TRCK":
-                        id3.add(
-                            TRCK(encoding=1, text=[f"{value[0][0]}/{value[0][1]}"])
-                        )
-                    elif frame_id == "TPOS":
-                        id3.add(
-                            TPOS(encoding=1, text=[f"{value[0][0]}/{value[0][1]}"])
-                        )
-                    elif frame_id == "TCMP":
-                        id3.add(TCMP(encoding=1, text=["1" if value else "0"]))
-                    elif frame_id == "COMM":
-                        id3.add(
-                            COMM(encoding=1, lang="eng", desc="", text=[str(value[0])])
-                        )
-                    else:
-                        id3.add(frame_class(encoding=1, text=[str(value[0])]))
-
-            id3.save(media_path, v2_version=3)
-
-    def apply_mp4_tags(
-        self,
-        media_path: Path,
-        tags: dict,
-        cover_bytes: bytes | None,
-        skip_tagging: bool,
-        extra_tags: dict | None,
-    ):
-        mp4 = MP4(media_path)
-        mp4.clear()
-
-        if not skip_tagging:
-            if cover_bytes is not None:
-                mp4["covr"] = [
-                    MP4Cover(
-                        data=cover_bytes,
-                        imageformat=(
-                            MP4Cover.FORMAT_JPEG
-                            if self.cover_format == CoverFormat.JPG
-                            else MP4Cover.FORMAT_PNG
-                        ),
-                    )
-                ]
-            mp4.update(tags)
-            if extra_tags:
-                mp4.update(extra_tags)
-
-        mp4.save()
-
-    async def _apply_cover(
-        self,
-        mp4: MP4,
-        cover_bytes: bytes | None,
-    ) -> None:
-        if cover_bytes is None:
-            return
-
-        mp4["covr"] = [
-            MP4Cover(
-                data=cover_bytes,
-                imageformat=(
-                    MP4Cover.FORMAT_JPEG
-                    if self.cover_format == CoverFormat.JPG
-                    else MP4Cover.FORMAT_PNG
-                ),
-            )
-        ]
-
-    def move_to_final_path(self, stage_path: str, final_path: str) -> None:
-        Path(final_path).parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(stage_path, final_path)
-
-    def write_cover_image(
-        self,
-        cover_bytes: bytes,
-        cover_path: str,
-    ) -> None:
+    def write_cover_image(self, cover_bytes: bytes, cover_path: str):
         Path(cover_path).parent.mkdir(parents=True, exist_ok=True)
         Path(cover_path).write_bytes(cover_bytes)
 
-    def get_playlist_file_path(
-        self,
-        tags: PlaylistTags,
-    ) -> str:
-        template_file_parts = self.playlist_file_template.split("/")
-        formatted_parts = []
-
-        for i, part in enumerate(template_file_parts):
-            is_folder = i < len(template_file_parts) - 1
-            formatted_part = CustomStringFormatter().format(
-                part,
-                playlist_artist=(tags.playlist_artist, "Unknown Playlist Artist"),
-                playlist_id=(tags.playlist_id, "Unknown Playlist ID"),
-                playlist_title=(tags.playlist_title, "Unknown Playlist Title"),
-                playlist_track=(tags.playlist_track, ""),
-            )
-            file_ext = None if is_folder else ".m3u8"
-            sanitized_formatted_part = self.sanitize_string(
-                formatted_part,
-                file_ext,
-            )
-            formatted_parts.append(sanitized_formatted_part)
-
-        return str(Path(self.output_path, *formatted_parts))
-
-    def update_playlist_file(
-        self,
-        playlist_file_path: str,
-        final_path: str,
-        playlist_track: int,
-    ) -> None:
-        playlist_file_path_obj = Path(playlist_file_path)
-        final_path_obj = Path(final_path)
-        output_dir_obj = Path(self.output_path)
-
-        playlist_file_path_obj.parent.mkdir(parents=True, exist_ok=True)
-        playlist_file_path_parent_parts_len = len(playlist_file_path_obj.parent.parts)
-        output_path_parts_len = len(output_dir_obj.parts)
-
-        final_path_relative = Path(
-            ("../" * (playlist_file_path_parent_parts_len - output_path_parts_len)),
-            *final_path_obj.parts[output_path_parts_len:],
-        )
-        playlist_file_lines = (
-            playlist_file_path_obj.open("r", encoding="utf8").readlines()
-            if playlist_file_path_obj.exists()
-            else []
-        )
-        if len(playlist_file_lines) < playlist_track:
-            playlist_file_lines.extend(
-                "\n" for _ in range(playlist_track - len(playlist_file_lines))
-            )
-
-        playlist_file_lines[playlist_track - 1] = final_path_relative.as_posix() + "\n"
-        with playlist_file_path_obj.open("w", encoding="utf8") as playlist_file:
-            playlist_file.writelines(playlist_file_lines)
-
-    def cleanup_temp(self, random_uuid: str) -> None:
-        temp_folder = Path(self.temp_path) / TEMP_PATH_TEMPLATE.format(random_uuid)
-        if temp_folder.exists():
-            shutil.rmtree(temp_folder)
+    def update_playlist_file(self, playlist_file_path: str, final_path: str, track_number: int):
+        playlist_file_path = Path(playlist_file_path)
+        playlist_file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Simple M3U8 update logic
+        if not playlist_file_path.exists():
+            playlist_file_path.write_text("#EXTM3U\n", encoding="utf8")
+            
+        with open(playlist_file_path, "a", encoding="utf8") as f:
+            f.write(f"{final_path}\n")

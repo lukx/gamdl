@@ -17,9 +17,6 @@ class AppleMusicUploadedVideoDownloader(AppleMusicBaseDownloader):
         self.interface = interface
         self.quality = quality
 
-    def get_cover_path(self, final_path: str, file_extension: str) -> str:
-        return str(Path(final_path).with_suffix(file_extension))
-
     async def get_download_item(
         self,
         uploaded_video_metadata: dict,
@@ -52,17 +49,16 @@ class AppleMusicUploadedVideoDownloader(AppleMusicBaseDownloader):
         )
 
         download_item.random_uuid = self.get_random_uuid()
-        download_item.staged_path = self.get_temp_path(
+        download_item.staged_path = str(self.naming.get_temp_path(
             uploaded_video_metadata["id"],
             download_item.random_uuid,
             "staged",
             "." + download_item.stream_info.file_format.value,
-        )
-        download_item.final_path = self.get_final_path(
+        ))
+        download_item.final_path = str(self.naming.get_final_path(
             download_item.media_tags,
             Path(download_item.staged_path).suffix,
-            None,
-        )
+        ))
 
         download_item.cover_url_template = self.interface.get_cover_url_template(
             uploaded_video_metadata,
@@ -79,10 +75,7 @@ class AppleMusicUploadedVideoDownloader(AppleMusicBaseDownloader):
             self.cover_format,
         )
         if cover_file_extension:
-            download_item.cover_path = self.get_cover_path(
-                download_item.final_path,
-                cover_file_extension,
-            )
+            download_item.cover_path = str(Path(download_item.final_path).with_suffix(cover_file_extension))
 
         return download_item
 
@@ -90,14 +83,14 @@ class AppleMusicUploadedVideoDownloader(AppleMusicBaseDownloader):
         self,
         download_item: DownloadItem,
     ) -> None:
-        await self.download_ytdlp(
+        await self.streamer.download(
             download_item.stream_info.video_track.stream_url,
-            download_item.staged_path,
+            Path(download_item.staged_path),
         )
 
         cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)
         await self.apply_tags(
-            download_item.staged_path,
+            Path(download_item.staged_path),
             download_item.media_tags,
             cover_bytes,
         )
