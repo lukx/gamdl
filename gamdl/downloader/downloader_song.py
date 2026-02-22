@@ -120,11 +120,16 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
 
         download_item.random_uuid = self.get_random_uuid()
         if download_item.stream_info and download_item.stream_info.file_format:
+            staged_extension = (
+                ".mp3"
+                if self.remux_to_mp3
+                else "." + download_item.stream_info.file_format.value
+            )
             download_item.staged_path = self.get_temp_path(
                 song_id,
                 download_item.random_uuid,
                 "staged",
-                "." + download_item.stream_info.file_format.value,
+                staged_extension,
             )
         else:
             download_item.staged_path = None
@@ -193,6 +198,8 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             "libmp3lame",
             "-b:a",
             bitrate,
+            "-id3v2_version",
+            "3",
             output_path,
             silent=self.silent,
         )
@@ -283,6 +290,30 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         media_id: str,
         fairplay_key: str,
     ):
+        if self.remux_to_mp3:
+            if codec.is_legacy() and self.remux_mode == RemuxMode.FFMPEG:
+                await self.remux_ffmpeg(
+                    encrypted_path,
+                    decrypted_path,
+                    decryption_key.audio_track.key,
+                )
+            elif codec.is_legacy() or not self.use_wrapper:
+                await self.decrypt_mp4decrypt(
+                    encrypted_path,
+                    decrypted_path,
+                    decryption_key.audio_track.key,
+                    codec.is_legacy(),
+                )
+            else:
+                await self.decrypt_amdecrypt(
+                    encrypted_path,
+                    decrypted_path,
+                    media_id,
+                    fairplay_key,
+                )
+            await self.remux_mp3(decrypted_path, staged_path)
+            return
+
         if codec.is_legacy() and self.remux_mode == RemuxMode.FFMPEG:
             await self.remux_ffmpeg(
                 encrypted_path,
@@ -306,11 +337,6 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                     decrypted_path,
                     staged_path,
                 )
-        elif self.remux_to_mp3:
-            await self.remux_mp3(
-                decrypted_path if Path(decrypted_path).exists() else encrypted_path,
-                staged_path,
-            )
         else:
             await self.decrypt_amdecrypt(
                 encrypted_path,

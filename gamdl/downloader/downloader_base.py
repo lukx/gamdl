@@ -322,6 +322,7 @@ class AppleMusicBaseDownloader:
 
         skip_tagging = "all" in exclude_tags
 
+        media_path = Path(media_path)
         if media_path.suffix == ".mp3":
             await asyncio.to_thread(
                 self.apply_id3_tags,
@@ -347,16 +348,18 @@ class AppleMusicBaseDownloader:
         cover_bytes: bytes | None,
         skip_tagging: bool,
     ):
-        mp3 = MP3(media_path, ID3=ID3)
-        mp3.delete()
-        mp3.save()
+        try:
+            id3 = ID3(media_path)
+        except:
+            id3 = ID3()
+
+        id3.delete(media_path)
 
         if not skip_tagging:
-            id3 = ID3(media_path)
             if cover_bytes is not None:
                 id3.add(
                     APIC(
-                        encoding=3,
+                        encoding=1,
                         mime="image/jpeg",
                         type=3,
                         desc="Cover",
@@ -364,40 +367,40 @@ class AppleMusicBaseDownloader:
                     )
                 )
 
-            # Mapping tags
             tag_map = {
-                "TALB": tags.get("\xa9alb"),
-                "TPE2": tags.get("aART"),
-                "TPE1": tags.get("\xa9ART"),
-                "COMM": tags.get("\xa9cmt"),
-                "TCOM": tags.get("\xa9wrt"),
-                "TDRC": tags.get("\xa9day"),
-                "TCON": tags.get("\xa9gen"),
-                "TIT2": tags.get("\xa9nam"),
-                "TRCK": tags.get("trkn"),
-                "TPOS": tags.get("disk"),
-                "TCMP": tags.get("cpil"),
+                "TALB": (TALB, tags.get("\xa9alb")),
+                "TPE2": (TPE2, tags.get("aART")),
+                "TPE1": (TPE1, tags.get("\xa9ART")),
+                "COMM": (COMM, tags.get("\xa9cmt")),
+                "TCOM": (TCOM, tags.get("\xa9wrt")),
+                "TDRC": (TDRC, tags.get("\xa9day")),
+                "TCON": (TCON, tags.get("\xa9gen")),
+                "TIT2": (TIT2, tags.get("\xa9nam")),
+                "TRCK": (TRCK, tags.get("trkn")),
+                "TPOS": (TPOS, tags.get("disk")),
+                "TCMP": (TCMP, tags.get("cpil")),
             }
 
-            for frame, value in tag_map.items():
+            for frame_id, (frame_class, value) in tag_map.items():
                 if value is not None:
-                    if isinstance(value, list) and not frame in ["TRCK", "TPOS"]:
-                        value = value[0]
-
-                    if frame == "TRCK":
-                        id3.add(TRCK(encoding=3, text=f"{value[0][0]}/{value[0][1]}"))
-                    elif frame == "TPOS":
-                        id3.add(TPOS(encoding=3, text=f"{value[0][0]}/{value[0][1]}"))
-                    elif frame == "TCMP":
-                        id3.add(TCMP(encoding=3, text="1" if value else "0"))
-                    elif frame == "COMM":
-                        id3.add(COMM(encoding=3, lang="eng", desc="", text=value))
-                    elif frame == "APIC":
-                        continue
+                    if frame_id == "TRCK":
+                        id3.add(
+                            TRCK(encoding=1, text=[f"{value[0][0]}/{value[0][1]}"])
+                        )
+                    elif frame_id == "TPOS":
+                        id3.add(
+                            TPOS(encoding=1, text=[f"{value[0][0]}/{value[0][1]}"])
+                        )
+                    elif frame_id == "TCMP":
+                        id3.add(TCMP(encoding=1, text=["1" if value else "0"]))
+                    elif frame_id == "COMM":
+                        id3.add(
+                            COMM(encoding=1, lang="eng", desc="", text=[str(value[0])])
+                        )
                     else:
-                        frame_class = globals()[frame]
-                        id3.add(frame_class(encoding=3, text=str(value)))
-            id3.save()
+                        id3.add(frame_class(encoding=1, text=[str(value[0])]))
+
+            id3.save(media_path, v2_version=3)
 
     def apply_mp4_tags(
         self,
