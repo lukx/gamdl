@@ -19,7 +19,7 @@ from .hardcoded_wvd import HARDCODED_WVD
 class AppleMusicBaseDownloader:
     def __init__(
         self,
-        output_path: str = "./Apple Music",
+        output_path: str = "./AppleMusic",
         temp_path: str = ".",
         wvd_path: str = None,
         overwrite: bool = False,

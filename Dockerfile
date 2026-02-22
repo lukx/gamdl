@@ -1,11 +1,12 @@
-FROM python:3.11-slim AS builder
+# --- Stage 1: Build the Python environment ---
+FROM python:3.12-slim AS python-builder
 
 WORKDIR /build
 COPY . .
 RUN pip install --no-cache-dir --user .
 
-# Build Bento4 from source
-FROM python:3.11-slim AS bento4-builder
+# --- Stage 2: Build Bento4 (mp4decrypt) ---
+FROM python:3.12-slim AS bento4-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -18,11 +19,10 @@ RUN git clone --depth 1 https://github.com/axiomatic-systems/Bento4.git /tmp/ben
     cd /tmp/bento4 && \
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    make mp4decrypt && \
-    cp mp4decrypt /usr/local/bin/
+    make mp4decrypt
 
-# Build GPAC (MP4Box) from source
-FROM python:3.11-slim AS gpac-builder
+# --- Stage 3: Build GPAC (MP4Box) ---
+FROM python:3.12-slim AS gpac-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -34,27 +34,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN git clone --depth 1 https://github.com/gpac/gpac.git /tmp/gpac && \
     cd /tmp/gpac && \
     ./configure --static-bin && \
-    make -j$(nproc) && \
-    cp bin/gcc/MP4Box /usr/local/bin/
+    make -j$(nproc)
 
-FROM python:3.11-slim
+# --- Stage 4: Fetch N_m3u8DL-RE ---
+FROM python:3.12-slim AS fetcher
 
-# Install FFmpeg, libicu (for N_m3u8DL-RE), and other dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
     curl \
     ca-certificates \
-    libicu76 \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy mp4decrypt from builder
-COPY --from=bento4-builder /usr/local/bin/mp4decrypt /usr/local/bin/
-
-# Copy MP4Box from builder
-COPY --from=gpac-builder /usr/local/bin/MP4Box /usr/local/bin/
-
-# Download N_m3u8DL-RE - architecture aware, fetches latest release
 RUN ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then \
     N_M3U8_ARCH="linux-x64"; \
@@ -66,12 +56,28 @@ RUN ARCH=$(dpkg --print-architecture) && \
     DOWNLOAD_URL=$(curl -s https://api.github.com/repos/nilaoda/N_m3u8DL-RE/releases/latest | jq -r ".assets[] | select(.name | contains(\"${N_M3U8_ARCH}\") and (contains(\"musl\") | not)) | .browser_download_url") && \
     curl -L "$DOWNLOAD_URL" -o /tmp/nm3u8.tar.gz && \
     tar -xzf /tmp/nm3u8.tar.gz -C /usr/local/bin/ && \
-    chmod +x /usr/local/bin/N_m3u8DL-RE && \
-    rm /tmp/nm3u8.tar.gz
+    chmod +x /usr/local/bin/N_m3u8DL-RE
 
-# Copy Python packages from builder
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
+# --- Final Stage: Runtime ---
+FROM python:3.12-slim
 
 WORKDIR /app
+
+# Install runtime dependencies only
+# Note: libicu72 is the standard for Debian Bookworm (Python 3.12-slim base)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    ca-certificates \
+    libicu76 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binaries from previous stages
+COPY --from=bento4-builder /tmp/bento4/build/mp4decrypt /usr/local/bin/
+COPY --from=gpac-builder /tmp/gpac/bin/gcc/MP4Box /usr/local/bin/
+COPY --from=fetcher /usr/local/bin/N_m3u8DL-RE /usr/local/bin/
+
+# Copy Python packages from builder
+COPY --from=python-builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+
 ENTRYPOINT ["gamdl"]

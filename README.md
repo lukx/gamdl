@@ -12,6 +12,7 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 ## ✨ Features
 
 - 🎵 **High-Quality Songs** - Download songs in AAC 256kbps and other codecs
+- 📻 **MP3 Support** - High-quality conversion to MP3 with compatible ID3v2.3 tagging
 - 🎬 **High-Quality Music Videos** - Download music videos in resolutions up to 4K
 - 📝 **Synced Lyrics** - Download synced lyrics in LRC, SRT, or TTML formats
 - 🏷️ **Rich Metadata** - Automatic tagging with comprehensive metadata
@@ -54,47 +55,70 @@ pip install gamdl
 
 ## 🐳 Docker
 
-Run gamdl via Docker with all external binaries pre-installed (FFmpeg, mp4decrypt, MP4Box, N_m3u8DL-RE).
+Run Gamdl via Docker with all external binaries pre-installed (`ffmpeg`, `mp4decrypt`, `MP4Box`, `N_m3u8DL-RE`).
 
-**Build the image:**
+Images are automatically published to the **GitHub Container Registry (GHCR)** on every release.
+
+### Pulling the Image
+
+```bash
+docker pull ghcr.io/lukx/gamdl:latest
+```
+
+### Basic Usage
+
+The easiest way to run Gamdl is by mapping your current directory to `/app`. This allows the container to find your `cookies.txt` and save downloads to an `AppleMusic/` folder in your current directory.
+
+```bash
+docker run --rm \
+  -v "$(pwd):/app" \
+  ghcr.io/lukx/gamdl:latest "https://music.apple.com/..."
+```
+
+### Advanced Examples
+
+**Explicit volume mapping (Recommended for automation):**
+
+```bash
+docker run --rm \
+  -v /path/to/cookies.txt:/app/cookies.txt:ro \
+  -v /path/to/downloads:/app/AppleMusic \
+  ghcr.io/lukx/gamdl:latest --remux-to-mp3 "https://music.apple.com/..."
+```
+
+**Using a configuration file:**
+
+```bash
+docker run --rm \
+  -v /path/to/cookies.txt:/app/cookies.txt:ro \
+  -v /path/to/downloads:/app/AppleMusic \
+  -v /path/to/config.ini:/root/.gamdl/config.ini \
+  ghcr.io/lukx/gamdl:latest "https://music.apple.com/..."
+```
+
+**Using N_m3u8DL-RE downloader (faster for large playlists):**
+
+```bash
+docker run --rm \
+  -v "$(pwd):/app" \
+  ghcr.io/lukx/gamdl:latest --download-mode nm3u8dlre "https://music.apple.com/..."
+```
+
+### Volume Mounts
+
+| Volume Mount | Purpose | Mode |
+|--------------|---------|------|
+| `/app/cookies.txt` | Apple Music cookies (Netscape format) | read-only |
+| `/app/AppleMusic` | Default download output directory | read-write |
+| `/root/.gamdl` | Config persistence home directory | read-write |
+
+### Local Build
+
+If you prefer to build the image yourself from source:
 
 ```bash
 docker build -t gamdl .
 ```
-
-**Basic usage:**
-
-```bash
-docker run --rm \
-  -v /path/to/cookies.txt:/app/cookies.txt:ro \
-  -v /path/to/output:/app/music \
-  gamdl --cookies-path /app/cookies.txt --output-path /app/music "https://music.apple.com/..."
-```
-
-**With config persistence:**
-
-```bash
-docker run --rm \
-  -v /path/to/cookies.txt:/app/cookies.txt:ro \
-  -v /path/to/output:/app/music \
-  -v /path/to/config:/root/.gamdl \
-  gamdl --cookies-path /app/cookies.txt --output-path /app/music "https://music.apple.com/..."
-```
-
-**Using N_m3u8DL-RE downloader:**
-
-```bash
-docker run --rm \
-  -v ./cookies.txt:/app/cookies.txt:ro \
-  -v ./music:/app/music \
-  gamdl --cookies-path /app/cookies.txt --output-path /app/music --download-mode nm3u8dlre "https://music.apple.com/..."
-```
-
-| Volume Mount | Purpose | Mode |
-|--------------|---------|------|
-| `/app/cookies.txt` | Apple Music cookies | read-only |
-| `/app/music` | Download output | read-write |
-| `/root/.gamdl` | Config persistence (optional) | read-write |
 
 ## 🚀 Usage
 
@@ -169,7 +193,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--wrapper-account-url`         | Wrapper account URL             | `http://127.0.0.1:30020`                       |
 | `--language`, `-l`              | Metadata language               | `en-US`                                        |
 | **Output Options**              |                                 |                                                |
-| `--output-path`, `-o`           | Output directory path           | `./Apple Music`                                |
+| `--output-path`, `-o`           | Output directory path           | `./AppleMusic`                                 |
 | `--temp-path`                   | Temporary directory path        | `.`                                            |
 | `--wvd-path`                    | .wvd file path                  | -                                              |
 | `--overwrite`                   | Overwrite existing files        | `false`                                        |
@@ -214,6 +238,15 @@ The file is created automatically on first run. Command-line arguments override 
 | **Post Video Options**          |                                 |                                                |
 | `--uploaded-video-quality`      | Post video quality              | `best`                                         |
 
+### Environment Variables
+
+The following environment variables can be used to set configuration options:
+
+| Environment Variable | Description |
+| -------------------- | ----------- |
+| `GAMDL_COOKIES_PATH` | Path to your `cookies.txt` file |
+| `GAMDL_OUTPUT_PATH`  | Root directory for downloads |
+
 ### Template Variables
 
 **Tags for templates and exclude-tags:**
@@ -256,6 +289,10 @@ The file is created automatically on first run. Command-line arguments override 
 ### Metadata Language
 
 Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't always work for music videos.
+
+### MP3 Conversion
+
+Gamdl supports high-quality conversion to MP3. Use the `--remux-to-mp3` flag to enable this feature. Tags are automatically converted and embedded using the ID3v2.3 standard for broad compatibility.
 
 ### Song Codecs
 

@@ -1,14 +1,13 @@
-.git/
-__pycache__/
-*.pyc
-*.pyo
-*.wvd
-cookies.txt
-*.egg-info/
-dist/
-build/
-.venv/
-venv/
+.git
 .env
-.claude/
-Apple Music/
+.agent/
+Audio/
+temp/
+__pycache__/
+*.egg-info/
+.venv/
+uv.lock
+.python-version
+cookies.txt
+*.mp3
+*.m4a

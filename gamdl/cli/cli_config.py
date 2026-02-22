@@ -110,6 +110,7 @@ class CliConfig:
             "-c",
             help="Cookies file path",
             default=api_from_cookies_sig.parameters["cookies_path"].default,
+            envvar="GAMDL_COOKIES_PATH",
             type=click.Path(
                 file_okay=True,
                 dir_okay=False,
@@ -143,6 +144,7 @@ class CliConfig:
             "-o",
             help="Output directory path",
             default=base_downloader_sig.parameters["output_path"].default,
+            envvar="GAMDL_OUTPUT_PATH",
             type=click.Path(
                 file_okay=False,
                 dir_okay=True,
