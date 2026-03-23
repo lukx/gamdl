@@ -7,6 +7,7 @@ import click
 import httpx
 import colorama
 from dataclass_click import dataclass_click
+from httpx import ConnectError
 
 from .. import __version__
 from ..api import AppleMusicApi, ItunesApi
@@ -69,10 +70,17 @@ async def main(config: CliConfig):
     logger.info(f"Starting Gamdl {__version__}")
 
     if config.use_wrapper:
-        apple_music_api = await AppleMusicApi.create_from_wrapper(
-            wrapper_account_url=config.wrapper_account_url,
-            language=config.language,
-        )
+        try:
+            apple_music_api = await AppleMusicApi.create_from_wrapper(
+                wrapper_account_url=config.wrapper_account_url,
+                language=config.language,
+            )
+        except ConnectError:
+            logger.critical(
+                "Could not connect to the wrapper account API. "
+                "Make sure the wrapper is running and the URL is correct."
+            )
+            return
     else:
         cookies_path = prompt_path(config.cookies_path)
         apple_music_api = await AppleMusicApi.create_from_netscape_cookies(
@@ -116,11 +124,9 @@ async def main(config: CliConfig):
         mp4decrypt_path=config.mp4decrypt_path,
         ffmpeg_path=config.ffmpeg_path,
         mp4box_path=config.mp4box_path,
-        amdecrypt_path=config.amdecrypt_path,
         use_wrapper=config.use_wrapper,
         wrapper_decrypt_ip=config.wrapper_decrypt_ip,
         download_mode=config.download_mode,
-        remux_mode=config.remux_mode,
         cover_format=config.cover_format,
         album_folder_template=config.album_folder_template,
         compilation_folder_template=config.compilation_folder_template,
@@ -139,7 +145,7 @@ async def main(config: CliConfig):
     song_downloader = AppleMusicSongDownloader(
         base_downloader=base_downloader,
         interface=song_interface,
-        codec=config.song_codec,
+        codec_priority=config.song_codec_piority,
         synced_lyrics_format=config.synced_lyrics_format,
         no_synced_lyrics=config.no_synced_lyrics,
         synced_lyrics_only=config.synced_lyrics_only,
@@ -150,6 +156,7 @@ async def main(config: CliConfig):
         base_downloader=base_downloader,
         interface=music_video_interface,
         codec_priority=config.music_video_codec_priority,
+        remux_mode=config.music_video_remux_mode,
         remux_format=config.music_video_remux_format,
         resolution=config.music_video_resolution,
     )
@@ -164,30 +171,10 @@ async def main(config: CliConfig):
         song_downloader=song_downloader,
         music_video_downloader=music_video_downloader,
         uploaded_video_downloader=uploaded_video_downloader,
+        artist_auto_select=config.artist_auto_select,
     )
 
     if not config.synced_lyrics_only:
-        if not base_downloader.full_ffmpeg_path and (
-            config.remux_mode == RemuxMode.FFMPEG
-            or config.download_mode == DownloadMode.NM3U8DLRE
-        ):
-            logger.critical(X_NOT_IN_PATH.format("ffmpeg", config.ffmpeg_path))
-            return
-
-        if (
-            not base_downloader.full_mp4box_path
-            and config.remux_mode == RemuxMode.MP4BOX
-        ):
-            logger.critical(X_NOT_IN_PATH.format("MP4Box", config.mp4box_path))
-            return
-
-        if not base_downloader.full_mp4decrypt_path and (
-            config.song_codec not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
-            or config.remux_mode == RemuxMode.MP4BOX
-        ):
-            logger.critical(X_NOT_IN_PATH.format("mp4decrypt", config.mp4decrypt_path))
-            return
-
         if (
             config.download_mode == DownloadMode.NM3U8DLRE
             and not base_downloader.full_nm3u8dlre_path
@@ -195,14 +182,46 @@ async def main(config: CliConfig):
             logger.critical(X_NOT_IN_PATH.format("N_m3u8DL-RE", config.nm3u8dlre_path))
             return
 
-        if config.use_wrapper and not base_downloader.full_amdecrypt_path:
-            logger.critical(X_NOT_IN_PATH.format("amdecrypt", config.amdecrypt_path))
-            return
+        missing_music_video_paths = []
 
-        if not config.song_codec.is_legacy() and not config.use_wrapper:
+        if not base_downloader.full_ffmpeg_path and (
+            config.music_video_remux_mode == RemuxMode.FFMPEG
+            or config.download_mode == DownloadMode.NM3U8DLRE
+        ):
+            missing_music_video_paths.append(
+                X_NOT_IN_PATH.format("ffmpeg", config.ffmpeg_path)
+            )
+
+        if (
+            not base_downloader.full_mp4box_path
+            and config.music_video_remux_mode == RemuxMode.MP4BOX
+        ):
+            missing_music_video_paths.append(
+                X_NOT_IN_PATH.format("MP4Box", config.mp4box_path)
+            )
+
+        if not base_downloader.full_mp4decrypt_path and (
+            config.song_codec_piority
+            not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
+            or config.music_video_remux_mode == RemuxMode.MP4BOX
+        ):
+            missing_music_video_paths.append(
+                X_NOT_IN_PATH.format("mp4decrypt", config.mp4decrypt_path)
+            )
+
+        if missing_music_video_paths:
             logger.warning(
-                "You have chosen an experimental song codec"
-                " without enabling wrapper."
+                "Music videos will not be downloaded due to missing dependencies:\n"
+                + "\n".join(missing_music_video_paths)
+            )
+
+        if (
+            any(not codec.is_legacy() for codec in config.song_codec_piority)
+            and not config.use_wrapper
+        ):
+            logger.warning(
+                "You have chosen an experimental song codec "
+                "without enabling wrapper. "
                 "They're not guaranteed to work due to API limitations."
             )
 

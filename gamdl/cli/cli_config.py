@@ -9,9 +9,11 @@ from dataclass_click import argument, option
 from ..api import AppleMusicApi
 from ..downloader import (
     AppleMusicBaseDownloader,
+    AppleMusicDownloader,
     AppleMusicMusicVideoDownloader,
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
+    ArtistAutoSelect,
     DownloadMode,
     RemuxFormatMusicVideo,
     RemuxMode,
@@ -35,6 +37,7 @@ song_downloader_sig = inspect.signature(AppleMusicSongDownloader.__init__)
 uploaded_video_downloader_sig = inspect.signature(
     AppleMusicUploadedVideoDownloader.__init__
 )
+downloader_sig = inspect.signature(AppleMusicDownloader.__init__)
 
 
 @dataclass
@@ -134,6 +137,16 @@ class CliConfig:
             "-l",
             help="Metadata language",
             default=api_sig.parameters["language"].default,
+        ),
+    ]
+    # Downloader specific options
+    artist_auto_select: Annotated[
+        ArtistAutoSelect | None,
+        option(
+            "--artist-auto-select",
+            help="Automatically select artist content to download (only for artist URLs)",
+            default=downloader_sig.parameters["artist_auto_select"].default,
+            type=ArtistAutoSelect,
         ),
     ]
     # Base Downloader specific options
@@ -238,19 +251,11 @@ class CliConfig:
             default=base_downloader_sig.parameters["mp4box_path"].default,
         ),
     ]
-    amdecrypt_path: Annotated[
-        str,
-        option(
-            "--amdecrypt-path",
-            help="amdecrypt executable path",
-            default=base_downloader_sig.parameters["amdecrypt_path"].default,
-        ),
-    ]
     use_wrapper: Annotated[
         bool,
         option(
             "--use-wrapper",
-            help="Use wrapper and amdecrypt for decrypting songs",
+            help="Use wrapper for decrypting songs",
             is_flag=True,
         ),
     ]
@@ -269,15 +274,6 @@ class CliConfig:
             help="Download mode",
             default=base_downloader_sig.parameters["download_mode"].default,
             type=DownloadMode,
-        ),
-    ]
-    remux_mode: Annotated[
-        RemuxMode,
-        option(
-            "--remux-mode",
-            help="Remux mode",
-            default=base_downloader_sig.parameters["remux_mode"].default,
-            type=RemuxMode,
         ),
     ]
     cover_format: Annotated[
@@ -381,13 +377,13 @@ class CliConfig:
         ),
     ]
     # DownloaderSong specific options
-    song_codec: Annotated[
-        SongCodec,
+    song_codec_piority: Annotated[
+        list[SongCodec],
         option(
-            "--song-codec",
-            help="Song codec",
-            default=song_downloader_sig.parameters["codec"].default,
-            type=SongCodec,
+            "--song-codec-priority",
+            help="Comma-separated codec priority",
+            default=song_downloader_sig.parameters["codec_priority"].default,
+            type=Csv(SongCodec),
         ),
     ]
     synced_lyrics_format: Annotated[
@@ -439,6 +435,15 @@ class CliConfig:
             help="Comma-separated codec priority",
             default=music_video_downloader_sig.parameters["codec_priority"].default,
             type=Csv(MusicVideoCodec),
+        ),
+    ]
+    music_video_remux_mode: Annotated[
+        RemuxMode,
+        option(
+            "--music-video-remux-mode",
+            help="Remux mode",
+            default=music_video_downloader_sig.parameters["remux_mode"].default,
+            type=RemuxMode,
         ),
     ]
     music_video_remux_format: Annotated[
