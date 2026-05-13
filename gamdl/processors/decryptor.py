@@ -1,6 +1,6 @@
 from pathlib import Path
 from ..utils import async_subprocess
-from ..downloader.constants import DEFAULT_SONG_DECRYPTION_KEY
+from ..downloader.amdecrypt import DEFAULT_SONG_DECRYPTION_KEY
 
 
 class Decryptor:

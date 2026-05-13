@@ -5,6 +5,7 @@ from ..interface.interface_song import AppleMusicSongInterface
 from .downloader_base import AppleMusicBaseDownloader
 from .enums import RemuxMode
 from .types import DownloadItem
+from ..interface.types import DecryptionKeyAv
 
 class AppleMusicSongDownloader(AppleMusicBaseDownloader):
     def __init__(
