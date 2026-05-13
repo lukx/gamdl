@@ -3,7 +3,8 @@ FROM python:3.12-slim AS python-builder
 
 WORKDIR /build
 COPY . .
-RUN pip install --no-cache-dir --user .
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir .
 
 # --- Stage 2: Build Bento4 (mp4decrypt) ---
 FROM python:3.12-slim AS bento4-builder
@@ -76,8 +77,8 @@ COPY --from=bento4-builder /tmp/bento4/build/mp4decrypt /usr/local/bin/
 COPY --from=gpac-builder /tmp/gpac/bin/gcc/MP4Box /usr/local/bin/
 COPY --from=fetcher /usr/local/bin/N_m3u8DL-RE /usr/local/bin/
 
-# Copy Python packages from builder
-COPY --from=python-builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
+# Copy Python virtual environment from builder
+COPY --from=python-builder /opt/venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
 
 ENTRYPOINT ["gamdl"]
