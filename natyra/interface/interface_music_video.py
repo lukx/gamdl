@@ -3,8 +3,6 @@ import urllib.parse
 
 import m3u8
 from async_lru import alru_cache
-from InquirerPy import inquirer
-from InquirerPy.base.control import Choice
 from pywidevine import Cdm
 
 from ..utils import get_response
@@ -240,10 +238,7 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
             )
             for playlist in video_playlists
         ]
-        selected = await inquirer.select(
-            message="Select which video codec to download: (Codec | Resolution | Bitrate)",
-            choices=choices,
-        ).execute_async()
+        selected = choices[0].value
 
         return selected
 
@@ -259,10 +254,7 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
             for playlist in playlist_master_data["media"]
             if playlist.get("uri")
         ]
-        selected = await inquirer.select(
-            message="Select which audio codec to download:",
-            choices=choices,
-        ).execute_async()
+        selected = choices[0].value
 
         return selected
 

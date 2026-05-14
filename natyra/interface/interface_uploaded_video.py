@@ -1,7 +1,5 @@
 import logging
 
-from InquirerPy import inquirer
-from InquirerPy.base.control import Choice
 
 from ..interface.enums import UploadedVideoQuality
 from ..interface.types import MediaTags
@@ -36,10 +34,7 @@ class AppleMusicUploadedVideoInterface(AppleMusicInterface):
             )
             for quality in qualities
         ]
-        selected = await inquirer.select(
-            message="Select which quality to download:",
-            choices=choices,
-        ).execute_async()
+        selected = choices[0].value
 
         return metadata["attributes"]["assetTokens"][selected]
 

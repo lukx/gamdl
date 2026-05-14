@@ -18,6 +18,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         synced_lyrics_only: bool = False,
         use_album_date: bool = False,
         fetch_extra_tags: bool = False,
+        remux_mode: RemuxMode = RemuxMode.FFMPEG,
     ):
         self.__dict__.update(base_downloader.__dict__)
         self.interface = interface
@@ -27,6 +28,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         self.synced_lyrics_only = synced_lyrics_only
         self.use_album_date = use_album_date
         self.fetch_extra_tags = fetch_extra_tags
+        self.remux_mode = remux_mode
 
     async def get_download_item(
         self,

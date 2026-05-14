@@ -9,8 +9,6 @@ from xml.dom import minidom
 from xml.etree import ElementTree
 
 import m3u8
-from InquirerPy import inquirer
-from InquirerPy.base.control import Choice
 from mutagen.mp4 import MP4
 from pywidevine import PSSH, Cdm
 from pywidevine.license_protocol_pb2 import WidevinePsshData

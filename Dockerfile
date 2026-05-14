@@ -63,6 +63,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
 FROM python:3.12-slim
 
 WORKDIR /app
+RUN chmod 777 /app
 
 # Install runtime dependencies only
 # Note: libicu72 is the standard for Debian Bookworm (Python 3.12-slim base)
@@ -81,4 +82,8 @@ COPY --from=fetcher /usr/local/bin/N_m3u8DL-RE /usr/local/bin/
 COPY --from=python-builder /opt/venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
 
-ENTRYPOINT ["gamdl"]
+ENV NATYRA_DOWNLOAD_MODE=nm3u8dlre
+
+EXPOSE 8000
+
+CMD ["python", "-m", "natyra"]
