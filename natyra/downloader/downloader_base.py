@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Union, List
 from pywidevine import Cdm, Device
 
-from ..interface.enums import CoverFormat
+from ..interface.enums import CoverFormat, Mp3Bitrate
 from ..metadata.tagger_mp3 import MP3Tagger
 from ..metadata.tagger_mp4 import MP4Tagger
 from ..interface.types import MediaTags
@@ -47,7 +47,7 @@ class AppleMusicBaseDownloader:
         truncate: int = None,
         silent: bool = False,
         remux_to_mp3: bool = False,
-        mp3_bitrate: str = "mid",
+        mp3_bitrate: Mp3Bitrate = Mp3Bitrate.MID,
     ):
         self.output_path = output_path
         self.temp_path = temp_path
@@ -162,10 +162,14 @@ class AppleMusicBaseDownloader:
         return bool(media_metadata["attributes"].get("playParams"))
 
     def move_to_final_path(self, stage_path: Union[str, Path], final_path: Union[str, Path]) -> None:
+        import logging
+        import os
         stage_path = Path(stage_path)
         final_path = Path(final_path)
         final_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(stage_path), str(final_path))
+        file_size_kb = os.path.getsize(str(final_path)) / 1024
+        logging.getLogger(__name__).info(f"Wrote 1 file ({file_size_kb:.2f} kb) to {final_path}")
 
     def cleanup_temp(self, folder_tag: str):
         shutil.rmtree(Path(self.temp_path) / f"gamdl_temp_{folder_tag}", ignore_errors=True)

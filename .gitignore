@@ -1,6 +1,7 @@
 /*
 __pycache__
 !natyra
+
 !.gitignore
 !.python-version
 !pyproject.toml
@@ -8,3 +9,4 @@ __pycache__
 !uv.lock
 .env
 !.github
+!CONFIG.md

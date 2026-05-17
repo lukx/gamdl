@@ -93,3 +93,10 @@ class CoverFormat(Enum):
     JPG = "jpg"
     PNG = "png"
     RAW = "raw"
+
+
+class Mp3Bitrate(Enum):
+    LOW = "low"
+    MID = "mid"
+    HIGH = "high"
+    BEST = "best"

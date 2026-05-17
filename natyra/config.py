@@ -1,7 +1,7 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from natyra.downloader.enums import DownloadMode, RemuxMode, ArtistAutoSelect, RemuxFormatMusicVideo
-from natyra.interface import CoverFormat, SongCodec, SyncedLyricsFormat, MusicVideoCodec, MusicVideoResolution, UploadedVideoQuality
+from natyra.interface import CoverFormat, SongCodec, SyncedLyricsFormat, MusicVideoCodec, MusicVideoResolution, UploadedVideoQuality, Mp3Bitrate
 
 class NatyraSettings(BaseSettings):
     # API & General
@@ -42,7 +42,7 @@ class NatyraSettings(BaseSettings):
     cover_size: int = 1200
     truncate: int | None = None
     remux_to_mp3: bool = False
-    mp3_bitrate: str = "mid"
+    mp3_bitrate: Mp3Bitrate = Mp3Bitrate.MID
 
     # Song settings
     song_codec_priority: list[SongCodec] = [SongCodec.AAC_LEGACY]

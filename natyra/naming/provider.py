@@ -134,7 +134,10 @@ class NamingProvider:
             )
             formatted_parts.append(sanitized_formatted_part)
 
-        return self.output_path.joinpath(*formatted_parts)
+        final_resolved_path = self.output_path.joinpath(*formatted_parts)
+        import logging
+        logging.getLogger(__name__).debug(f"Resolved final path to: {final_resolved_path.absolute()}")
+        return final_resolved_path
 
     def get_temp_path(
         self,

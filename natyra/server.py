@@ -29,6 +29,10 @@ from natyra.interface import (
     AppleMusicUploadedVideoInterface,
 )
 
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Natyra API Server", description="Background queue for Apple Music downloads")

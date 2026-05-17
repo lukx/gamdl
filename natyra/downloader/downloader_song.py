@@ -178,7 +178,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             await self.remuxer.remux_mp3(
                 decrypted_path, 
                 staged_path, 
-                bitrate_map.get(self.mp3_bitrate, "160k")
+                bitrate_map.get(self.mp3_bitrate.value, "160k")
             )
             return
 
