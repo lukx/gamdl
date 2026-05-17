@@ -80,7 +80,7 @@ def read_job_state(job_id: str) -> dict | None:
     with open(file_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-async def _init_downloader():
+async def _init_downloader(output_path: str = None):
     if settings.use_wrapper:
         apple_music_api = await AppleMusicApi.create_from_wrapper(
             wrapper_account_url=settings.wrapper_account_url,
@@ -99,7 +99,7 @@ async def _init_downloader():
     uploaded_video_interface = AppleMusicUploadedVideoInterface(interface)
 
     base_downloader = AppleMusicBaseDownloader(
-        output_path=settings.output_path,
+        output_path=output_path or settings.output_path,
         temp_path=settings.temp_path,
         wvd_path=settings.wvd_path,
         overwrite=settings.overwrite,
@@ -175,16 +175,17 @@ async def background_download_task(job_id: str, request: DownloadRequest):
     state["finished_at"] = None
     write_job_state(job_id, state)
 
-    # Allow request override of output path
+    # Determine request override of output path
+    resolved_output_path = settings.output_path
     if request.type == "audiobook" and settings.audiobooks_output_path:
-        settings.output_path = settings.audiobooks_output_path
+        resolved_output_path = settings.audiobooks_output_path
     elif request.type in ["music-video", "music_video"] and settings.music_videos_output_path:
-        settings.output_path = settings.music_videos_output_path
+        resolved_output_path = settings.music_videos_output_path
     elif request.type == "podcast" and settings.podcasts_output_path:
-        settings.output_path = settings.podcasts_output_path
+        resolved_output_path = settings.podcasts_output_path
 
     try:
-        downloader = await _init_downloader()
+        downloader = await _init_downloader(output_path=resolved_output_path)
         url_info = downloader.get_url_info(request.url)
         if not url_info:
             raise ValueError("Invalid URL info parsed")
