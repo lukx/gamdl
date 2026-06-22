@@ -134,7 +134,7 @@ class AppleMusicApi:
         home_page = response.text
 
         index_js_uri_match = re.search(
-            r"/(assets/index-legacy[~-][^/\"]+\.js)",
+            r"/(assets/index[~-][^/\"]+\.js)",
             home_page,
         )
         if not index_js_uri_match:
@@ -144,7 +144,7 @@ class AppleMusicApi:
         response = await self.client.get(f"{APPLE_MUSIC_HOMEPAGE_URL}/{index_js_uri}")
         index_js_page = response.text
 
-        token_match = re.search('(?=eyJh)(.*?)(?=")', index_js_page)
+        token_match = re.search(r'"(eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)"', index_js_page)        
         if not token_match:
             raise Exception("Token not found in index.js page")
         token = token_match.group(1)

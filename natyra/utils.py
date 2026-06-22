@@ -24,7 +24,7 @@ async def get_response(
     valid_responses: set[int] = {200},
 ) -> httpx.Response:
     async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.get(url)
+        response = await client.get(url, follow_redirects=True)
         raise_for_status(response, valid_responses)
         return response
 
