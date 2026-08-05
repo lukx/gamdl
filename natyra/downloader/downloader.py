@@ -525,12 +525,6 @@ class AppleMusicDownloader:
                 download_item.synced_lyrics_path,
             )
 
-        if download_item.playlist_tags and self.base_downloader.save_playlist:
-            self.base_downloader.update_playlist_file(
-                download_item.playlist_file_path,
-                download_item.final_path,
-                download_item.playlist_tags.playlist_track,
-            )
 
     async def _final_processing(
         self,

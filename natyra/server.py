@@ -196,6 +196,21 @@ async def background_download_task(job_id: str, request: DownloadRequest):
             state["error"] = "No download items found"
             return
 
+        playlist_file_path = None
+        for item in download_queue:
+            if item.playlist_file_path:
+                playlist_file_path = Path(item.playlist_file_path)
+                break
+
+        if playlist_file_path:
+            try:
+                playlist_file_path = playlist_file_path.resolve()
+                playlist_file_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(playlist_file_path, "w", encoding="utf-8") as f:
+                    f.write("#EXTM3U\n")
+            except Exception as pe:
+                logger.error(f"Failed to initialize playlist file: {pe}")
+
         failed_count = 0
         success_count = 0
         skipped_count = 0
@@ -210,19 +225,32 @@ async def background_download_task(job_id: str, request: DownloadRequest):
             }
             write_job_state(job_id, state)
 
+            final_path_to_add = None
             try:
                 await downloader.download(item)
                 state["tracks"][track_id]["status"] = "done"
                 success_count += 1
-            except MediaFileExists:
+                final_path_to_add = item.final_path
+            except MediaFileExists as e:
                 state["tracks"][track_id]["status"] = "skipped"
                 state["tracks"][track_id]["error"] = "File already exists"
                 skipped_count += 1
+                final_path_to_add = getattr(e, "media_path", item.final_path)
             except Exception as e:
                 state["tracks"][track_id]["status"] = "failed"
                 state["tracks"][track_id]["error"] = str(e)
                 failed_count += 1
             
+            if playlist_file_path and final_path_to_add:
+                try:
+                    abs_output_path = Path(resolved_output_path).resolve()
+                    abs_final_path = Path(final_path_to_add).resolve()
+                    rel_path = abs_final_path.relative_to(abs_output_path).as_posix()
+                    with open(playlist_file_path, "a", encoding="utf-8") as f:
+                        f.write(rel_path + "\n")
+                except Exception as pe:
+                    logger.error(f"Failed to append to playlist file: {pe}")
+
             write_job_state(job_id, state)
 
         if failed_count == 0:
