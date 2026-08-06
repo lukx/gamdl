@@ -178,13 +178,4 @@ class AppleMusicBaseDownloader:
         Path(cover_path).parent.mkdir(parents=True, exist_ok=True)
         Path(cover_path).write_bytes(cover_bytes)
 
-    def update_playlist_file(self, playlist_file_path: str, final_path: str, track_number: int):
-        playlist_file_path = Path(playlist_file_path)
-        playlist_file_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Simple M3U8 update logic
-        if not playlist_file_path.exists():
-            playlist_file_path.write_text("#EXTM3U\n", encoding="utf8")
-            
-        with open(playlist_file_path, "a", encoding="utf8") as f:
-            f.write(f"{final_path}\n")
+

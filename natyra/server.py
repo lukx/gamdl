@@ -198,8 +198,11 @@ async def background_download_task(job_id: str, request: DownloadRequest):
 
         playlist_file_path = None
         for item in download_queue:
-            if item.playlist_file_path:
-                playlist_file_path = Path(item.playlist_file_path)
+            if item.playlist_tags and item.playlist_tags.playlist_title:
+                sanitized_title = downloader.base_downloader.naming.sanitize_string(
+                    item.playlist_tags.playlist_title
+                )
+                playlist_file_path = Path(resolved_output_path) / f"{sanitized_title}.m3u8"
                 break
 
         if playlist_file_path:
